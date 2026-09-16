@@ -1,0 +1,106 @@
+# ============================================================
+# WEB API / BACKEND
+# ============================================================
+
+fastapi
+# FastAPI - Python web framework for building APIs and backend services.
+
+uvicorn[standard]
+# Uvicorn - ASGI server used to run the FastAPI application.
+
+python-multipart
+# Handles multipart/form-data requests, especially file uploads in FastAPI.
+
+pydantic
+# Data validation and serialization using Python type hints.
+
+pydantic-settings
+# Manages application configuration and environment-based settings using Pydantic.
+
+python-dotenv
+# Loads environment variables from a .env file.
+
+
+# ============================================================
+# DATABASE / DATA PROCESSING
+# ============================================================
+
+motor
+# Async MongoDB driver for Python, commonly used with FastAPI applications.
+
+pandas
+# Data analysis and manipulation using DataFrames; useful for CSV/Excel data.
+
+openpyxl
+# Reads and writes Microsoft Excel (.xlsx) files.
+
+numpy
+# Numerical computing library used for arrays, mathematical operations,
+# and supporting machine-learning/data-processing workflows.
+
+
+# ============================================================
+# PDF / DOCUMENT PROCESSING
+# ============================================================
+
+pdfplumber
+# Extracts text, tables, and layout information from PDF documents.
+
+pymupdf
+# High-performance PDF/document processing library for reading,
+# extracting text/images, rendering pages, and manipulating PDFs.
+
+pytesseract
+# Python wrapper for Tesseract OCR; extracts text from scanned images/PDF pages.
+
+pillow
+# Python Imaging Library used for opening, processing, and manipulating images.
+
+
+# ============================================================
+# LANGCHAIN / LLM APPLICATION DEVELOPMENT
+# ============================================================
+
+langchain-core
+# Core LangChain abstractions such as messages, prompts, runnables,
+# tools, and other building blocks for LLM applications.
+
+langchain-text-splitters
+# Splits large documents into smaller chunks suitable for embedding
+# and retrieval-augmented generation (RAG).
+
+langchain-huggingface
+# LangChain integrations for Hugging Face models, embeddings,
+# and related Hugging Face functionality.
+
+langchain-groq
+# LangChain integration for using Groq-hosted large language models.
+
+langchain-google-genai
+# LangChain integration for Google Generative AI / Gemini models.
+
+langchain-pinecone
+# LangChain integration for Pinecone vector databases,
+# used for storing and retrieving document embeddings.
+
+
+# ============================================================
+# EMBEDDINGS / SEMANTIC SEARCH
+# ============================================================
+
+sentence-transformers
+# Provides pretrained transformer models for generating text embeddings,
+# useful for semantic search and RAG systems.
+
+
+# ============================================================
+# HUGGING FACE / MACHINE LEARNING
+# ============================================================
+
+transformers
+# Hugging Face library providing pretrained transformer models
+# for NLP, embeddings, text generation, classification, etc.
+
+accelerate
+# Hugging Face library that simplifies efficient model execution
+# across CPUs, GPUs, and different hardware configurations.
