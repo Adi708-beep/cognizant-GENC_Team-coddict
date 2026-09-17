@@ -1,11 +1,15 @@
 """
-LangChain model layer.
+Feedy LLM Service
 
-One place decides which model Feedy talks to. Everything else asks for a chain.
-Provider order comes from LLM_PROVIDER_ORDER. The first provider that can be
-constructed becomes primary; the rest are attached with Runnable.with_fallbacks,
-so a 429 or a dead key moves to the next provider inside a single .invoke()
-call instead of raising.
+Responsibilities:
+    1. Build the configured LangChain chat model
+    2. Support local TinyLlama through Hugging Face
+    3. Support Hugging Face remote inference
+    4. Support Groq fallback
+    5. Support Gemini fallback
+    6. Build Pydantic JSON chains
+    7. Parse tolerant JSON model responses
+    8. Provide vision OCR for extraction.py
 """
 
 from __future__ import annotations
@@ -25,33 +29,69 @@ from pydantic import BaseModel, ValidationError
 from app.config import settings
 
 
+# ============================================================
+# TYPES
+# ============================================================
+
 T = TypeVar("T", bound=BaseModel)
+
+
+# ============================================================
+# STATE
+# ============================================================
 
 _ACTIVE: list[str] = []
 
 
-VISION_PROMPT = (
-    "Transcribe every piece of text on this feedback form exactly as written, "
-    "including handwriting. Preserve the question labels and the answers. "
-    "Do not summarise, do not correct spelling, do not add commentary. "
-    "If a word is illegible, write [illegible]."
-)
-
+# ============================================================
+# ERRORS
+# ============================================================
 
 class LLMError(RuntimeError):
     pass
 
 
-# ---------------------------------------------------------------- providers
+# ============================================================
+# VISION PROMPT
+# ============================================================
 
+VISION_PROMPT = (
+    "Transcribe every piece of text on this feedback form exactly "
+    "as written, including handwriting. Preserve the question labels "
+    "and the answers. Do not summarise, do not correct spelling, "
+    "do not add commentary. If a word is illegible, write [illegible]."
+)
+
+
+# ============================================================
+# HUGGING FACE
+# ============================================================
 
 def _huggingface() -> BaseChatModel:
-    """Hugging Face, either a local pipeline or a served endpoint."""
+    """
+    Build the Hugging Face model.
+
+    If USE_LOCAL_LLM=true:
+        Runs TinyLlama locally.
+
+    If USE_LOCAL_LLM=false:
+        Uses Hugging Face Inference Endpoint.
+    """
 
     from langchain_huggingface import ChatHuggingFace
 
+    # --------------------------------------------------------
+    # LOCAL HUGGING FACE MODEL
+    # --------------------------------------------------------
+
     if settings.use_local_llm:
+
         from langchain_huggingface import HuggingFacePipeline
+
+        print(
+            "[llm] building local Hugging Face model:",
+            settings.hf_local_model,
+        )
 
         pipe = HuggingFacePipeline.from_model_id(
             model_id=settings.hf_local_model,
@@ -68,10 +108,22 @@ def _huggingface() -> BaseChatModel:
             model_id=settings.hf_local_model,
         )
 
+    # --------------------------------------------------------
+    # REMOTE HUGGING FACE
+    # --------------------------------------------------------
+
     if not settings.hf_token:
-        raise LLMError("HF_TOKEN is not set")
+
+        raise LLMError(
+            "HF_TOKEN is not set"
+        )
 
     from langchain_huggingface import HuggingFaceEndpoint
+
+    print(
+        "[llm] building Hugging Face endpoint:",
+        settings.hf_repo_id,
+    )
 
     endpoint = HuggingFaceEndpoint(
         repo_id=settings.hf_repo_id,
@@ -90,11 +142,27 @@ def _huggingface() -> BaseChatModel:
     )
 
 
+# ============================================================
+# GROQ
+# ============================================================
+
 def _groq() -> BaseChatModel:
+    """
+    Build Groq model.
+    """
+
     if not settings.groq_api_key:
-        raise LLMError("GROQ_API_KEY is not set")
+
+        raise LLMError(
+            "GROQ_API_KEY is not set"
+        )
 
     from langchain_groq import ChatGroq
+
+    print(
+        "[llm] building Groq:",
+        settings.groq_model,
+    )
 
     return ChatGroq(
         model=settings.groq_model,
@@ -106,11 +174,29 @@ def _groq() -> BaseChatModel:
     )
 
 
-def _gemini() -> BaseChatModel:
-    if not settings.gemini_api_key:
-        raise LLMError("GEMINI_API_KEY is not set")
+# ============================================================
+# GEMINI
+# ============================================================
 
-    from langchain_google_genai import ChatGoogleGenerativeAI
+def _gemini() -> BaseChatModel:
+    """
+    Build Gemini model.
+    """
+
+    if not settings.gemini_api_key:
+
+        raise LLMError(
+            "GEMINI_API_KEY is not set"
+        )
+
+    from langchain_google_genai import (
+        ChatGoogleGenerativeAI,
+    )
+
+    print(
+        "[llm] building Gemini:",
+        settings.gemini_model,
+    )
 
     return ChatGoogleGenerativeAI(
         model=settings.gemini_model,
@@ -120,6 +206,10 @@ def _gemini() -> BaseChatModel:
     )
 
 
+# ============================================================
+# PROVIDER REGISTRY
+# ============================================================
+
 _BUILDERS = {
     "huggingface": _huggingface,
     "groq": _groq,
@@ -127,51 +217,143 @@ _BUILDERS = {
 }
 
 
+# ============================================================
+# CHAT MODEL
+# ============================================================
+
 @lru_cache(maxsize=1)
 def get_chat_model() -> Runnable:
-    """Primary model with the remaining providers attached as fallbacks."""
+    """
+    Build the primary model and attach the remaining providers
+    as LangChain fallbacks.
 
-    built: list[tuple[str, BaseChatModel]] = []
+    Example:
+
+        Hugging Face
+             ↓
+           fails
+             ↓
+           Groq
+             ↓
+           fails
+             ↓
+          Gemini
+    """
+
+    built: list[
+        tuple[str, BaseChatModel]
+    ] = []
+
+    print()
+    print("[llm] ========================================")
+    print("[llm] BUILDING MODEL CHAIN")
+    print("[llm] ========================================")
+
+    # --------------------------------------------------------
+    # Try providers in configured order
+    # --------------------------------------------------------
 
     for name in settings.provider_order:
+
         builder = _BUILDERS.get(name)
 
         if builder is None:
+
             print(
-                f"[llm] unknown provider "
-                f"'{name}' in LLM_PROVIDER_ORDER, skipped"
+                f"[llm] unknown provider '{name}', skipped"
             )
+
             continue
 
         try:
-            built.append((name, builder()))
+
+            model = builder()
+
+            built.append(
+                (name, model)
+            )
+
+            print(
+                f"[llm] provider '{name}' ready"
+            )
+
         except Exception as exc:
-            print(f"[llm] provider '{name}' unavailable: {exc}")
+
+            print(
+                f"[llm] provider '{name}' unavailable:",
+                exc,
+            )
+
+    # --------------------------------------------------------
+    # Nothing available
+    # --------------------------------------------------------
 
     if not built:
+
         raise LLMError(
-            "no chat model could be built - check the keys in .env"
+            "no chat model could be built - "
+            "check the keys in .env"
         )
 
-    _ACTIVE.clear()
-    _ACTIVE.extend(name for name, _ in built)
+    # --------------------------------------------------------
+    # Save active provider names
+    # --------------------------------------------------------
 
-    print("[llm] model chain:", " -> ".join(_ACTIVE))
+    _ACTIVE.clear()
+
+    _ACTIVE.extend(
+        name
+        for name, _ in built
+    )
+
+    print(
+        "[llm] model chain:",
+        " -> ".join(_ACTIVE),
+    )
+
+    # --------------------------------------------------------
+    # Primary
+    # --------------------------------------------------------
 
     primary = built[0][1]
 
+    # --------------------------------------------------------
+    # No fallback needed
+    # --------------------------------------------------------
+
     if len(built) == 1:
+
         return primary
 
+    # --------------------------------------------------------
+    # Attach LangChain fallbacks
+    # --------------------------------------------------------
+
+    fallback_models = [
+        model
+        for _, model in built[1:]
+    ]
+
     return primary.with_fallbacks(
-        [model for _, model in built[1:]]
+        fallback_models
     )
 
 
+# ============================================================
+# MODEL DESCRIPTION
+# ============================================================
+
 def describe_models() -> dict[str, Any]:
+    """
+    Return information used by /api/health.
+    """
+
     try:
+
         get_chat_model()
+
     except LLMError as exc:
+
         return {
             "error": str(exc),
             "configured": settings.provider_order,
@@ -180,7 +362,11 @@ def describe_models() -> dict[str, Any]:
     return {
         "configured": settings.provider_order,
         "active": list(_ACTIVE),
-        "primary": _ACTIVE[0] if _ACTIVE else None,
+        "primary": (
+            _ACTIVE[0]
+            if _ACTIVE
+            else None
+        ),
         "hf_mode": (
             "local-pipeline"
             if settings.use_local_llm
@@ -196,23 +382,56 @@ def describe_models() -> dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------- JSON chains
-
+# ============================================================
+# JSON CHAIN
+# ============================================================
 
 def build_json_chain(
     system_prompt: str,
     schema: type[T],
 ) -> Runnable:
     """
-    prompt | model | parser, returning an instance of `schema`.
+    Build:
 
-    Call it with:
-        chain.invoke({"input": "..."})
+        Prompt
+          ↓
+        Chat Model
+          ↓
+        JSON/Pydantic parser
+
+    Returns a Pydantic object.
+
+    Usage:
+
+        chain = build_json_chain(
+            SYSTEM_PROMPT,
+            MyModel
+        )
+
+        result = chain.invoke({
+            "input": "..."
+        })
     """
+
+    # --------------------------------------------------------
+    # Pydantic parser
+    # --------------------------------------------------------
 
     parser = PydanticOutputParser(
         pydantic_object=schema
     )
+
+    # --------------------------------------------------------
+    # IMPORTANT:
+    #
+    # parser.get_format_instructions() contains JSON braces.
+    #
+    # Do NOT directly concatenate them into the prompt
+    # template.
+    #
+    # Using partial() prevents ChatPromptTemplate from
+    # interpreting those braces as variables.
+    # --------------------------------------------------------
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -229,143 +448,289 @@ def build_json_chain(
         ]
     ).partial(
         system_prompt=system_prompt,
-        format_instructions=parser.get_format_instructions(),
+        format_instructions=(
+            parser.get_format_instructions()
+        ),
     )
+
+    # --------------------------------------------------------
+    # LCEL chain
+    # --------------------------------------------------------
 
     return (
         prompt
         | get_chat_model()
         | RunnableLambda(
-            lambda msg: parse_message(msg, parser)
+            lambda message:
+            parse_message(
+                message,
+                parser,
+            )
         )
     )
 
+
+# ============================================================
+# PARSE MODEL RESPONSE
+# ============================================================
 
 def parse_message(
     message: Any,
     parser: PydanticOutputParser,
 ) -> BaseModel:
     """
-    Turn a model reply into a validated object, tolerating fences and prose.
+    Parse model response into the requested Pydantic model.
+
+    Handles:
+
+        plain JSON
+
+        ```json
+        {...}
+        ```
+
+        explanatory text before JSON
     """
 
-    text = (
-        message.content
-        if isinstance(message, BaseMessage)
-        else str(message)
-    )
+    # --------------------------------------------------------
+    # Extract text
+    # --------------------------------------------------------
 
-    if isinstance(text, list):
-        # Some providers return a list of content blocks rather than a string.
+    if isinstance(
+        message,
+        BaseMessage,
+    ):
+
+        text = message.content
+
+    else:
+
+        text = str(message)
+
+    # --------------------------------------------------------
+    # Some providers return content blocks
+    # --------------------------------------------------------
+
+    if isinstance(
+        text,
+        list,
+    ):
+
         text = "".join(
             part.get("text", "")
             for part in text
             if isinstance(part, dict)
         )
 
+    text = str(text).strip()
+
+    # --------------------------------------------------------
+    # First attempt: normal Pydantic parser
+    # --------------------------------------------------------
+
     try:
-        return parser.parse(text)
-    except Exception:
-        # Fall through to tolerant JSON extraction.
-        pass
 
-    blob = first_json_object(text)
-
-    if blob is None:
-        raise LLMError(
-            f"model did not return JSON: {text[:200]!r}"
+        return parser.parse(
+            text
         )
 
+    except Exception:
+
+        pass
+
+    # --------------------------------------------------------
+    # Second attempt: extract JSON object
+    # --------------------------------------------------------
+
+    blob = first_json_object(
+        text
+    )
+
+    if blob is None:
+
+        raise LLMError(
+            "model did not return JSON: "
+            f"{text[:300]!r}"
+        )
+
+    # --------------------------------------------------------
+    # Validate extracted JSON
+    # --------------------------------------------------------
+
     try:
-        return parser.pydantic_object.model_validate(blob)
+
+        return parser.pydantic_object.model_validate(
+            blob
+        )
 
     except ValidationError as exc:
+
         raise LLMError(
-            f"JSON did not match "
-            f"{parser.pydantic_object.__name__}: {exc}"
+            "JSON did not match "
+            f"{parser.pydantic_object.__name__}: "
+            f"{exc}"
         ) from exc
 
 
-def first_json_object(text: str) -> dict | None:
-    """
-    Pull the first complete JSON object out of a reply.
+# ============================================================
+# EXTRACT FIRST JSON OBJECT
+# ============================================================
 
-    Brace-counting means a trailing sentence after the closing brace
-    does not break parsing.
+def first_json_object(
+    text: str,
+) -> dict | None:
+    """
+    Find the first complete JSON object.
+
+    Uses brace counting instead of a simple regex so nested
+    JSON objects work correctly.
     """
 
     cleaned = text.strip()
 
+    # --------------------------------------------------------
+    # Handle Markdown fences
+    # --------------------------------------------------------
+
     if "```" in cleaned:
+
         for part in cleaned.split("```"):
+
             candidate = part.lstrip()
 
-            if candidate.lower().startswith("json"):
+            if candidate.lower().startswith(
+                "json"
+            ):
+
                 candidate = candidate[4:]
 
             if "{" in candidate:
+
                 cleaned = candidate
+
                 break
+
+    # --------------------------------------------------------
+    # Find first opening brace
+    # --------------------------------------------------------
 
     start = cleaned.find("{")
 
     if start == -1:
+
         return None
 
+    # --------------------------------------------------------
+    # Brace parser
+    # --------------------------------------------------------
+
     depth = 0
+
     in_string = False
+
     escaped = False
 
-    for index in range(start, len(cleaned)):
+    for index in range(
+        start,
+        len(cleaned),
+    ):
+
         char = cleaned[index]
 
+        # ----------------------------------------------------
+        # Escaped character
+        # ----------------------------------------------------
+
         if escaped:
+
             escaped = False
+
             continue
 
         if char == "\\":
+
             escaped = True
+
             continue
 
+        # ----------------------------------------------------
+        # String boundaries
+        # ----------------------------------------------------
+
         if char == '"':
+
             in_string = not in_string
+
             continue
 
         if in_string:
+
             continue
 
+        # ----------------------------------------------------
+        # Braces
+        # ----------------------------------------------------
+
         if char == "{":
+
             depth += 1
 
         elif char == "}":
+
             depth -= 1
 
             if depth == 0:
+
+                candidate = cleaned[
+                    start:index + 1
+                ]
+
                 try:
+
                     return json.loads(
-                        cleaned[start:index + 1]
+                        candidate
                     )
+
                 except json.JSONDecodeError:
+
                     return None
 
     return None
 
 
-# ---------------------------------------------------------------- vision tier
-
+# ============================================================
+# VISION OCR
+# ============================================================
 
 def vision_read(
     image_bytes: bytes,
     mime_type: str = "image/png",
 ) -> str:
-    """Tier-3 OCR: hand the page image to a vision-capable chat model."""
+    """
+    Tier-3 OCR using a vision-capable model.
+
+    This function matches extraction.py's expected interface:
+
+        vision_read(image_bytes, mime_type)
+
+    It intentionally uses Gemini because the local TinyLlama
+    text model is NOT a vision model.
+    """
+
+    # --------------------------------------------------------
+    # Gemini required
+    # --------------------------------------------------------
 
     if not settings.gemini_api_key:
+
         raise LLMError(
-            "vision OCR requested but GEMINI_API_KEY is not set"
+            "vision OCR requested but "
+            "GEMINI_API_KEY is not set"
         )
 
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_google_genai import (
+        ChatGoogleGenerativeAI,
+    )
 
     model = ChatGoogleGenerativeAI(
         model=settings.gemini_model,
@@ -374,7 +739,17 @@ def vision_read(
         max_output_tokens=2048,
     )
 
-    encoded = base64.b64encode(image_bytes).decode()
+    # --------------------------------------------------------
+    # Encode image
+    # --------------------------------------------------------
+
+    encoded = base64.b64encode(
+        image_bytes
+    ).decode()
+
+    # --------------------------------------------------------
+    # Multimodal message
+    # --------------------------------------------------------
 
     message = HumanMessage(
         content=[
@@ -385,18 +760,247 @@ def vision_read(
             {
                 "type": "image_url",
                 "image_url": (
-                    f"data:{mime_type};base64,{encoded}"
+                    f"data:{mime_type};base64,"
+                    f"{encoded}"
                 ),
             },
         ]
     )
 
+    # --------------------------------------------------------
+    # Call vision model
+    # --------------------------------------------------------
+
     try:
+
+        response = model.invoke(
+            [message]
+        )
+
         return str(
-            model.invoke([message]).content
+            response.content
         ).strip()
 
     except Exception as exc:
+
         raise LLMError(
             f"vision model failed: {exc}"
         ) from exc
+
+
+# ============================================================
+# SIMPLE GENERATE FUNCTION
+# ============================================================
+
+def generate(
+    prompt: str,
+    max_new_tokens: int | None = None,
+) -> str:
+    """
+    Simple text generation helper.
+
+    Kept for your test_local_llm.py and any other code
+    that directly wants a string.
+    """
+
+    if max_new_tokens is None:
+
+        max_new_tokens = (
+            settings.max_new_tokens
+        )
+
+    print(
+        "[llm] USE_LOCAL_LLM =",
+        settings.use_local_llm,
+    )
+
+    # --------------------------------------------------------
+    # Local
+    # --------------------------------------------------------
+
+    if settings.use_local_llm:
+
+        print(
+            "[llm] provider = local TinyLlama"
+        )
+
+        # Direct Transformers implementation keeps the
+        # standalone test simple and reliable.
+
+        import torch
+
+        from transformers import (
+            AutoModelForCausalLM,
+            AutoTokenizer,
+        )
+
+        tokenizer = (
+            _get_direct_local_tokenizer()
+        )
+
+        model = (
+            _get_direct_local_model()
+        )
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are Feedy, an AI customer "
+                    "feedback classification assistant."
+                ),
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ]
+
+        formatted_prompt = (
+            tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        )
+
+        inputs = tokenizer(
+            formatted_prompt,
+            return_tensors="pt",
+        )
+
+        device = next(
+            model.parameters()
+        ).device
+
+        inputs = {
+            key: value.to(device)
+            for key, value in inputs.items()
+        }
+
+        with torch.no_grad():
+
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=(
+                    tokenizer.eos_token_id
+                ),
+            )
+
+        input_length = (
+            inputs["input_ids"].shape[1]
+        )
+
+        generated_ids = output_ids[
+            0,
+            input_length:
+        ]
+
+        result = tokenizer.decode(
+            generated_ids,
+            skip_special_tokens=True,
+        )
+
+        return result.strip()
+
+    # --------------------------------------------------------
+    # Remote
+    # --------------------------------------------------------
+
+    llm = get_chat_model()
+
+    response = llm.invoke(
+        prompt
+    )
+
+    if hasattr(
+        response,
+        "content",
+    ):
+
+        return str(
+            response.content
+        ).strip()
+
+    return str(
+        response
+    ).strip()
+
+
+# ============================================================
+# DIRECT LOCAL MODEL CACHE
+# ============================================================
+
+@lru_cache(maxsize=1)
+def _get_direct_local_tokenizer():
+
+    from transformers import (
+        AutoTokenizer,
+    )
+
+    print(
+        "[llm] loading local tokenizer:",
+        settings.hf_local_model,
+    )
+
+    return AutoTokenizer.from_pretrained(
+        settings.hf_local_model
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_direct_local_model():
+
+    import torch
+
+    from transformers import (
+        AutoModelForCausalLM,
+    )
+
+    print(
+        "[llm] loading local TinyLlama model:",
+        settings.hf_local_model,
+    )
+
+    if torch.cuda.is_available():
+
+        model = (
+            AutoModelForCausalLM.from_pretrained(
+                settings.hf_local_model,
+                dtype=torch.float16,
+                device_map="auto",
+            )
+        )
+
+    else:
+
+        model = (
+            AutoModelForCausalLM.from_pretrained(
+                settings.hf_local_model,
+                dtype=torch.float32,
+            )
+        )
+
+        model.to("cpu")
+
+    model.eval()
+
+    return model
+
+
+# ============================================================
+# BACKWARD COMPATIBILITY
+# ============================================================
+
+def get_llm():
+    """
+    Compatibility helper.
+
+    Existing code can use:
+
+        get_llm().invoke(...)
+    """
+
+    return get_chat_model()

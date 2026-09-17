@@ -31,6 +31,7 @@ dependencies = [
     "sentence-transformers",
     "transformers",
     "accelerate",
+    "torch>=2.14.0",
 ]
 
 [build-system]

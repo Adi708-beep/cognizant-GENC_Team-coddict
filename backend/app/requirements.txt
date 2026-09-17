@@ -104,3 +104,7 @@ transformers
 accelerate
 # Hugging Face library that simplifies efficient model execution
 # across CPUs, GPUs, and different hardware configurations.
+
+transformers
+accelerate
+torch

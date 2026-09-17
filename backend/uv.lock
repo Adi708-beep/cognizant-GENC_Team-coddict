@@ -251,6 +251,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "sentence-transformers" },
+    { name = "torch" },
     { name = "transformers" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -278,6 +279,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "sentence-transformers" },
+    { name = "torch", specifier = ">=2.14.0" },
     { name = "transformers" },
     { name = "uvicorn", extras = ["standard"] },
 ]

@@ -30,3 +30,34 @@
 {"text": "Filthy toilets, sticky tables and a member of staff who was openly on their phone. Genuinely shocking.", "label": "Poor"}
 {"text": "Paid for express delivery, it arrived six days late and damaged. No apology, no refund offered.", "label": "Poor"}
 {"text": "Food quality was rated 1 out of 5. Service was rated 1 out of 5. Appalling from start to finish, we walked out and will not return.", "label": "Poor"}
+{"text": "An outstanding visit. The food was fresh, beautifully presented and the staff made us feel genuinely welcome. We are already planning our next visit.", "label": "Excellent"}
+{"text": "Everything exceeded expectations. The order was accurate, the food arrived quickly and the team were exceptionally helpful throughout.", "label": "Excellent"}
+{"text": "Absolutely loved it. Great portions, excellent flavour and the staff were cheerful even though the restaurant was packed.", "label": "Excellent"}
+{"text": "The service was flawless and the food was excellent. Our waiter noticed we were celebrating and went out of his way to make the evening special.", "label": "Excellent"}
+{"text": "Brilliant experience. The restaurant was spotless, the food was delicious and our table was checked on regularly without ever feeling rushed.", "label": "Excellent"}
+{"text": "Everything was handled perfectly from ordering to payment. The team were friendly, efficient and clearly cared about the customer experience.", "label": "Excellent"}
+{"text": "Five-star experience all around. The meal was delicious, the staff were attentive and the value for money was better than expected.", "label": "Excellent"}
+
+{"text": "Good experience overall. The food was tasty and the staff were helpful, although the dessert took a little longer than expected.", "label": "Good"}
+{"text": "We enjoyed the meal. The restaurant was busy and service was slightly slower than usual, but everything arrived correctly and tasted good.", "label": "Good"}
+{"text": "A pleasant visit. The food was fresh and the staff were friendly, although finding a table took a few extra minutes.", "label": "Good"}
+{"text": "Quite happy with the service. One side dish was missing initially, but the staff corrected it quickly and the rest of the meal was good.", "label": "Good"}
+{"text": "Tasty food and reasonable prices. The only downside was that the restaurant was quite noisy during the evening.", "label": "Good"}
+{"text": "Overall a good experience. Checkout took longer than expected, but the product worked exactly as described once we got started.", "label": "Good"}
+{"text": "Everything was mostly smooth. The staff were polite and the food was good, though the portion of the starter felt a little small.", "label": "Good"}
+
+{"text": "The staff were polite, but we had to remind them twice about an item that was missing from our order. The process could be improved.", "label": "Need Improvements"}
+{"text": "The online ordering page was confusing and did not clearly show which items were unavailable. I had to restart the order twice.", "label": "Need Improvements"}
+{"text": "Our table was near the kitchen and the noise made conversation difficult for most of the meal. Better seating arrangements would help.", "label": "Need Improvements"}
+{"text": "The food arrived at different times, so one person had finished eating before the rest of us received our meals. Timing needs attention.", "label": "Need Improvements"}
+{"text": "The checkout instructions were unclear and I had to contact support to understand the final step. The guidance should be more straightforward.", "label": "Need Improvements"}
+{"text": "The staff were friendly, but nobody explained the delay when our order was running late. A quick update would have made the wait easier.", "label": "Need Improvements"}
+{"text": "The receipt contained an incorrect item and we had to ask for it to be corrected. The billing process should be checked more carefully.", "label": "Need Improvements"}
+
+{"text": "Absolutely terrible service. Our order was completely wrong, nobody took responsibility and we were left waiting for over an hour. I will not return.", "label": "Poor"}
+{"text": "The food was cold and poorly prepared, and when we complained the staff were dismissive. We left disappointed and will take our business elsewhere.", "label": "Poor"}
+{"text": "My payment was taken but the order was never processed. Support ignored my messages and I still have not received a refund.", "label": "Poor"}
+{"text": "Completely unacceptable experience. We waited nearly two hours, received the wrong items and could not get anyone to help resolve the problem.", "label": "Poor"}
+{"text": "The product stopped working after a few days and customer support provided no useful solution. I regret purchasing it.", "label": "Poor"}
+{"text": "Terrible experience from beginning to end. The place was dirty, the service was rude and our complaint was simply ignored.", "label": "Poor"}
+{"text": "I was promised a replacement but nothing arrived and nobody followed up. After repeated attempts to contact support, I have lost confidence in the service.", "label": "Poor"}
